@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+   <!-- <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.9.0/dist/ffmpeg.min.js"></script>   -->
+     <script src="mp4.js"></script>  
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP4 Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        video {
+            width: 400px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="number"] {
+            width: 80px;
+        }
+
+        button {
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MP4 Video Editor</h1>
+
+    <div id="video-container">
+        <input type="file" id="file-input" accept="video/mp4">
+        <video id="video" controls></video>
+
+        <div class="controls">
+            <label for="start-time">Start:</label>
+            <input type="number" id="start-time" min="0" step="0.1" placeholder="Start (s)">
+            
+            <label for="end-time">End:</label>
+            <input type="number" id="end-time" min="0" step="0.1" placeholder="End (s)">
+
+            <button id="cut">Cut</button>
+            <button id="copy">Copy</button>
+            <button id="paste">Paste</button>
+            <button id="download">Download</button>
+        </div>
+
+        <div id="log" style="color: red;"></div>
+    </div>
+
+   <!-- <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.2/dist/ffmpeg.min.js"></script> -->
+<script>
+    const fileInput = document.getElementById('file-input');
+    const video = document.getElementById('video');
+    const startTimeInput = document.getElementById('start-time');
+    const endTimeInput = document.getElementById('end-time');
+    const log = document.getElementById('log');
+
+    let videoFile = null;
+    //const ffmpeg = FFmpeg.createFFmpeg({ log: true });
+    const ffmpeg = FFmpeg.createFFmpeg({
+    log: true,
+    corePath: './ffmpeg-core.js' // Ruta local al núcleo
+});
+(async () => {
+    try {
+        log.textContent = 'Loading FFmpeg...';
+        await ffmpeg.load();
+        log.textContent = 'FFmpeg loaded successfully!';
+    } catch (error) {
+        log.textContent = `Error loading FFmpeg: ${error.message}`;
+        console.error(error);
+    }
+})();
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            videoFile = file;
+            const url = URL.createObjectURL(file);
+            video.src = url;
+        }
+    });
+
+    document.getElementById('cut').addEventListener('click', async () => {
+        const start = parseFloat(startTimeInput.value);
+        const end = parseFloat(endTimeInput.value);
+
+        if (!validateTimes(start, end)) return;
+
+        if (!videoFile) {
+            log.textContent = 'No video loaded.';
+            return;
+        }
+
+        log.textContent = 'Processing...';
+        await ffmpeg.load();
+
+        const inputName = 'input.mp4';
+        const outputName = 'output.mp4';
+
+        ffmpeg.FS('writeFile', inputName, await fetchFile(videoFile));
+        await ffmpeg.run(
+            '-i', inputName,
+            '-ss', start.toString(),
+            '-to', end.toString(),
+            '-c', 'copy',
+            outputName
+        );
+
+        const data = ffmpeg.FS('readFile', outputName);
+        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cut-video.mp4';
+        a.click();
+
+        log.textContent = 'Cut and download completed.';
+    });
+
+    function validateTimes(start, end) {
+        if (isNaN(start) || isNaN(end)) {
+            log.textContent = 'Start and End times must be numbers.';
+            return false;
+        }
+
+        if (start < 0 || end < 0 || start >= end || end > video.duration) {
+            log.textContent = 'Invalid time range.';
+            return false;
+        }
+
+        log.textContent = '';
+        return true;
+    }
+</script>
+
+</body>
+</html>
